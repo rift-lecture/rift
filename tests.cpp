@@ -72,7 +72,7 @@ namespace rift {
 
         TEST("a = 1 a", 1);
         TEST("a = 1 a = a + 2 a", 3);
-        TEST("a = 1 a = a - a a", 0);
+//        TEST("a = 1 a = a - a a", 0);
         TEST("a = 2 a = a * 3 a", 6);
         TEST("a = 20 a / 4", 5);
         TEST("a = 1 b = 2 a < b", 1);
@@ -88,6 +88,12 @@ namespace rift {
         TEST("a = 1 if (a) { 1 } else { 2 }", 1);
         TEST("a = 1 b = 1 if (a) { b = 2 } b", 2);
         TEST("a = 0 b = 1 if (a) { b = 2 } b", 1);
+        TEST("a = 10 b = 0 while (a > 0) { b = b + 1 a = a - 1 } c(a, b)", 0, 10);
+
+        TEST("f = function() { 1 } f()", 1);
+        TEST("f = function(a, b) { a + b } f(1, 2)", 3);
+        TEST("f = function() { a + b } a = 1 b = 2 f()", 3);
+        TEST("f = function() { a = 1 a } a = 2 c(f(), a)", 1, 2);
 
         TEST("a = c(1, 2, 3) a[1]", 2);
         TEST("a = \"aba\" a[c(0,2)]", "aa");

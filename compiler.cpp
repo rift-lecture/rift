@@ -1,6 +1,8 @@
 #include "parser.h"
 #include "runtime.h"
 #include "compiler.h"
+#include "type_checker.h"
+#include "type_analysis.h"
 #include "pool.h"
 
 #include <initializer_list>
@@ -153,6 +155,24 @@ public:
     */
     Compiler() : m(new RiftModule()) {}
 
+    /** Runtime function call. The first argument is the name of a runtime
+      function defined in the RiftModule. The remaining arguments are passed
+      to the function. The string is the name of the register where the result
+      of the call will be stored, when empty, LLVM picks. The last argument is
+      the BB where to append. */
+#define RUNTIME_CALL(name, ...) \
+    CallInst::Create(m->name,				     \
+            std::vector<llvm::Value*>({__VA_ARGS__}), \
+            "", \
+            b)
+
+    /** Shorthand for calling runtime functions.  */
+#define RUNTIME_CALL(name, ...) \
+    CallInst::Create(m->name, \
+            std::vector<llvm::Value*>({__VA_ARGS__}), \
+            "", \
+            b)
+
     /** Compiles a function and returns a pointer to the native code.  JIT
       compilation in LLVM finalizes the module, this function can only be
       called once.
@@ -173,6 +193,23 @@ public:
             rec->code = reinterpret_cast<FunPtr>(engine->getPointerToFunction(rec->bitcode));
         }
         return Pool::getFunction(result)->code;
+    }
+
+    /** Optimize on the bitcode before native code generation. The
+      TypeAnalysis, Unboxing and BoxingRemoval are Rift passes, the rest is
+      from LLVM.
+      */
+    void optimizeModule(ExecutionEngine * ee) {
+        auto *pm = new legacy::FunctionPassManager(m);
+        m->setDataLayout(*ee->getDataLayout());
+        pm->add(new TypeChecker());
+        pm->add(new TypeAnalysis());
+        pm->add(createConstantPropagationPass());
+        // Optimize each function of this module
+        for (llvm::Function & f : *m) {
+            pm->run(f);
+        }
+        delete pm;
     }
 
     /** Translates a function to bitcode, registers it with the runtime, and
@@ -197,8 +234,15 @@ public:
         llvm::Function::arg_iterator args = f->arg_begin();
         env = args++;
         env->setName("env");
-        // Compile body 
-        node->body->accept(this);
+
+        if (node->body->body.empty()) {
+            result = RUNTIME_CALL(doubleVectorLiteral, fromDouble(0));
+            result = RUNTIME_CALL(fromDoubleVector, result);
+        } else {
+            // Compile body 
+            node->body->accept(this);
+        }
+
         // Append return instruction of the last used value
         ReturnInst::Create(getGlobalContext(), result, b);
 
@@ -210,25 +254,6 @@ public:
         env = oldEnv;
         return result;
     }
-
-    /** Runtime function call. The first argument is the name of a runtime
-      function defined in the RiftModule. The remaining arguments are passed
-      to the function. The string is the name of the register where the result
-      of the call will be stored, when empty, LLVM picks. The last argument is
-      the BB where to append. */
-#define RUNTIME_CALL(name, ...) \
-    CallInst::Create(m->name,				     \
-            std::vector<llvm::Value*>({__VA_ARGS__}), \
-            "", \
-            b)
-
-    /** Shorthand for calling runtime functions.  */
-#define RUNTIME_CALL(name, ...) \
-    CallInst::Create(m->name, \
-            std::vector<llvm::Value*>({__VA_ARGS__}), \
-            "", \
-            b)
-
 
     /** Create Value from double scalar .  */
     llvm::Value * fromDouble(double value) {

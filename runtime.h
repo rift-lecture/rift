@@ -6,6 +6,8 @@
 #include "llvm.h"
 #include "ast.h"
 
+#pragma warning(disable : 4267 4297 4018)
+
 /** Value: forward declaration 
 */
 struct RVal;
@@ -20,7 +22,7 @@ struct CharacterVector {
 
     /** Creates a CV from given data and size. Takes ownership of the data.
     */
-    CharacterVector(size_t size):
+    CharacterVector(int size):
         data(new char[size + 1]),
         size(size) {
         data[size] = 0;
