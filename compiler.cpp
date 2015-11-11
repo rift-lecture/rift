@@ -323,7 +323,18 @@ public:
 
     /** Rift Function Call. First obtain the function pointer, then arguments. */
     void visit(ast::UserCall * node) override {
-        throw "Caaally caaaly caaaly call";
+        node->name->accept(this);
+
+        std::vector<Value *> args;
+        args.push_back(result);
+        args.push_back(fromInt(node->args.size()));
+
+        for (ast::Exp * arg : node->args) {
+            arg->accept(this);
+            args.push_back(result);
+        }
+
+        result = CallInst::Create(m->call, args, "", b);
     }
 
     /** Call length runtime, box the scalar result  */
@@ -424,7 +435,41 @@ public:
 	PHI nodes.
       */
     void visit(ast::WhileLoop * node) override {
-        throw "Looopy looopy looopy loop";
+        // create BB for loop start (evaluation of the guard), loop body, and exit
+        BasicBlock * guard = BasicBlock::Create(getGlobalContext(), "guard", f, nullptr);
+        BasicBlock * body = BasicBlock::Create(getGlobalContext(), "body", f, nullptr);
+        BasicBlock * cont = BasicBlock::Create(getGlobalContext(), "cont", f, nullptr);
+
+        // we need a default value for the loop to evaluate to
+        BasicBlock * entry = b;
+        auto zero = RUNTIME_CALL(doubleVectorLiteral, fromDouble(0));
+        zero = RUNTIME_CALL(fromDoubleVector, zero);
+
+        // jump to start 
+        BranchInst::Create(guard, b);
+
+        // compile start as the evaluation of the guard and conditional branch
+        b = guard;
+        auto phi = PHINode::Create(type::ptrValue, 2, "whilePhi", b);
+        phi->addIncoming(zero, entry);
+
+        node->guard->accept(this);
+
+        auto test = RUNTIME_CALL(toBoolean, result);
+        BranchInst::Create(body, cont, test, b);
+
+        // compile loop body, at the end of the loop body, branch to start
+        b = body;
+        node->body->accept(this);
+
+        // the value of the loop expression should be the last statement executed
+        phi->addIncoming(result, b);
+        BranchInst::Create(guard, b);
+
+        // set the current BB to the one after the loop, the result is the
+        // value of the last instruction
+        b = cont;
+        result = phi;
     }
 
 private:
