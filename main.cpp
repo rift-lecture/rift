@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <chrono>
 
 #include "llvm.h"
 #include "ast.h"
@@ -7,10 +8,13 @@
 #include "runtime.h"
 #include "compiler.h"
 #include "tests.h"
+#include "rift.h"
 
 using namespace std;
 using namespace llvm;
 using namespace rift;
+
+extern double eval_time;
 
 void interactive() {
     cout << "rift console - type exit to quit" << endl;
@@ -36,8 +40,14 @@ void interactive() {
             if (in.empty())
                 continue;
             in = in + "\n";
-            eval(env, in.c_str())->print(cout);
-            cout << endl;
+            auto start = chrono::high_resolution_clock::now();
+            RVal * x = eval(env, in.c_str());
+            auto t = chrono::high_resolution_clock::now() - start;
+            cout << *x << endl;
+            double total_t = static_cast<double>(t.count()) / chrono::high_resolution_clock::period::den;
+            cout << "Evaluation:               " << eval_time << "[s]" << endl;
+            cout << "Evaluation & compilation: " << total_t << endl;
+            cout << "Compilation:              " << (1 - eval_time/total_t)*100 << "[%]" << endl;
         } catch (char const * error) {
             std::cerr << error << std::endl;
             std::cout << std::endl;
@@ -61,19 +71,28 @@ void runScript(char const * filename) {
 
 }
 
+bool DEBUG = false;
+
 int main(int argc, char * argv[]) {
     // initialize the JIT
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
     LLVMInitializeNativeAsmParser();
-    if (argc == 1) {
+    int argPos = 1;
+    if (argc > argPos) {
+        if (0 == strncmp("-d", argv[argPos], 2)) {
+            DEBUG = true;
+            argPos++;
+        }
+    }
+    if (argc == argPos) {
         tests();
         interactive();
     } else {
-        if (argc > 2)
+        if (argc > argPos+1)
             cerr << "Only one script can be loaded at a time" << endl;
         else
-            runScript(argv[1]);
+            runScript(argv[argPos]);
     }
 }
 

@@ -1,12 +1,20 @@
+#include <initializer_list>
+#include <iostream>
+
 #include "parser.h"
 #include "runtime.h"
+#include "specializedRuntime.h"
 #include "compiler.h"
 #include "type_checker.h"
 #include "type_analysis.h"
+#include "unboxing.h"
+#include "boxing_removal.h"
 #include "pool.h"
+#include "rift.h"
 
-#include <initializer_list>
 using namespace llvm;
+
+using namespace std;
 
 namespace rift {
 
@@ -63,6 +71,7 @@ FunctionType * v_vvv = FUN_TYPE(ptrValue, ptrValue, ptrValue, ptrValue);
 FunctionType * v_vi = FUN_TYPE(ptrValue, ptrValue, Int);
 FunctionType * v_viv = FUN_TYPE(ptrValue, ptrValue, Int, ptrValue);
 FunctionType * v_ei = FUN_TYPE(ptrValue, ptrEnvironment, Int);
+FunctionType * v_ecv = FUN_TYPE(ptrValue, ptrEnvironment, ptrCharacterVector);
 FunctionType * void_eiv = FUN_TYPE(Void, ptrEnvironment, Int, ptrValue);
 FunctionType * dv_dvdv = FUN_TYPE(ptrDoubleVector, ptrDoubleVector, ptrDoubleVector);
 FunctionType * cv_cvcv = FUN_TYPE(ptrCharacterVector, ptrCharacterVector, ptrCharacterVector);
@@ -124,15 +133,36 @@ public:
         NAME_IS(fromDoubleVector);
         NAME_IS(fromCharacterVector);
         NAME_IS(fromFunction);
+        NAME_IS(doubleFromValue);
+        NAME_IS(scalarFromVector);
+        NAME_IS(characterFromValue);
+        NAME_IS(functionFromValue);
+        NAME_IS(doubleGetSingleElement);
+        NAME_IS(doubleGetElement);
+        NAME_IS(characterGetElement);
         NAME_IS(genericGetElement);
+        NAME_IS(doubleSetElement);
+        NAME_IS(scalarSetElement);
+        NAME_IS(characterSetElement);
         NAME_IS(genericSetElement);
+        NAME_IS(doubleAdd);
+        NAME_IS(characterAdd);
         NAME_IS(genericAdd);
+        NAME_IS(doubleSub);
         NAME_IS(genericSub);
+        NAME_IS(doubleMul);
         NAME_IS(genericMul);
+        NAME_IS(doubleDiv);
         NAME_IS(genericDiv);
+        NAME_IS(doubleEq);
+        NAME_IS(characterEq);
         NAME_IS(genericEq);
+        NAME_IS(doubleNeq);
+        NAME_IS(characterNeq);
         NAME_IS(genericNeq);
+        NAME_IS(doubleLt);
         NAME_IS(genericLt);
+        NAME_IS(doubleGt);
         NAME_IS(genericGt);
         NAME_IS(createFunction);
         NAME_IS(toBoolean);
@@ -140,7 +170,10 @@ public:
         NAME_IS(length);
         NAME_IS(type);
         NAME_IS(eval);
+        NAME_IS(characterEval);
         NAME_IS(genericEval);
+        NAME_IS(doublec);
+        NAME_IS(characterc);
         NAME_IS(c);
         report_fatal_error("Extern function '" + Name + "' couldn't be resolved!");
     }
@@ -185,6 +218,7 @@ public:
                 .setMCJITMemoryManager(
                         std::unique_ptr<MemoryManager>(new MemoryManager()))
                 .create();
+        optimizeModule(engine);
         engine->finalizeObject();
         // Compile newly registered functions; update their native code in the
         // registered functions vector
@@ -202,12 +236,24 @@ public:
     void optimizeModule(ExecutionEngine * ee) {
         auto *pm = new legacy::FunctionPassManager(m);
         m->setDataLayout(*ee->getDataLayout());
-        pm->add(new TypeChecker());
+        //pm->add(new TypeChecker());
         pm->add(new TypeAnalysis());
+        pm->add(new Unboxing());
+        pm->add(new BoxingRemoval());
         pm->add(createConstantPropagationPass());
         // Optimize each function of this module
         for (llvm::Function & f : *m) {
-            pm->run(f);
+            if (not f.empty()) {
+                if (DEBUG) {
+                    cout << "After translation to bitcode: -------------------------------" << endl;
+                    f.dump();
+                }
+                pm->run(f);
+                if (DEBUG) {
+                    cout << "After LLVM's constant propagation: --------------------------" << endl;
+                    f.dump();
+                }
+            }
         }
         delete pm;
     }
