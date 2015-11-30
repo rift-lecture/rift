@@ -525,6 +525,15 @@ RVal * c(int size, ...) {
     }
 }
 
+double doubleDot(DoubleVector * lhs, DoubleVector * rhs) {
+    assert(false and "Fill me in");
+}
+
+RVal * genericDot(RVal * lhs, RVal * rhs) {
+    assert(false and "Fill me in");
+}
+
+
 
 
 

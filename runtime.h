@@ -448,5 +448,10 @@ RVal * genericEval(Environment * env, RVal * value);
     if there is a function among them.
  */
 RVal * c(int size, ...);
+
+/** Inner product of two vectors.
+ */
+RVal * genericDot(RVal * lhs, RVal * rhs);
+
 }
 #endif // RUNTIME_H
